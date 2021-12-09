@@ -35,8 +35,8 @@ pub mod curves{
             }
             sum
         }
-        pub fn plot(self:&Self, OUTPUT_FILE:&str, caption:&str, xBound:(f32,f32), yBound:(f32,f32), step:f32)->Result<(),Box<dyn Error>>{
-            let root = BitMapBackend::new(OUTPUT_FILE,(640,480)).into_drawing_area();
+        pub fn plot(self:&Self, output_file:&str, caption:&str, x_bound:(f32,f32), y_bound:(f32,f32), step:f32)->Result<(),Box<dyn Error>>{
+            let root = BitMapBackend::new(output_file,(640,480)).into_drawing_area();
             root.fill(&WHITE)?;
 
             let mut chart = ChartBuilder::on(&root)
@@ -44,7 +44,7 @@ pub mod curves{
                 .y_label_area_size(40)
                 .margin(5)
                 .caption(caption, ("sans-serif", 50.0))
-                .build_cartesian_2d(xBound.0..xBound.1, yBound.0..yBound.1)?;
+                .build_cartesian_2d(x_bound.0..x_bound.1, y_bound.0..y_bound.1)?;
 
                 chart.configure_mesh()
                     .x_labels(20)
@@ -54,14 +54,14 @@ pub mod curves{
                     .y_label_formatter(&|v| format!("{:.1}", v))
                     .draw()?;
                 
-                let x_axis = (xBound.0..xBound.1).step(step);
+                let x_axis = (x_bound.0..x_bound.1).step(step);
                 chart.draw_series(LineSeries::new(x_axis.values().map(|x| (x, self.sub(x as f64) as f32)), &RED))?;
                 //.label("Curve")
                 //.legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
                 //chart.configure_series_labels().border_style(&BLACK).draw()?;
 
                 root.present().expect("Unable to write result to file, please make sure 'plotters-doc-data' dir exists under current dir");
-                println!("Result has been saved to {}", OUTPUT_FILE);
+                println!("Result has been saved to {}", output_file);
             Ok(())
         
         }
