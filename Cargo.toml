@@ -1,5 +1,8 @@
 [package]
-name = "curves"
+name = "erosion"
+authors = ["Sam Brown"]
+description = "A library to plot fourier curves and functions"
+license = "MIT"
 version = "0.1.0"
 edition = "2021"
 

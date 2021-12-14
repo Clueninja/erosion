@@ -141,13 +141,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "curves"
-version = "0.1.0"
-dependencies = [
- "plotters",
-]
-
-[[package]]
 name = "deflate"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -188,6 +181,13 @@ dependencies = [
  "libc",
  "winapi",
  "wio",
+]
+
+[[package]]
+name = "erosion"
+version = "0.1.0"
+dependencies = [
+ "plotters",
 ]
 
 [[package]]
