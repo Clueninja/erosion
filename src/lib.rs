@@ -19,7 +19,7 @@ pub mod prelude{
     }
 
     pub trait Calculus{
-        fn intergrate(self: &Self)-> Self;
+        fn integrate(self: &Self)-> Self;
         fn differenciate(self: &Self)->Self;
     }
 }
@@ -29,7 +29,7 @@ pub mod prelude{
 pub mod curves{
     use plotters::prelude::*;
     use super::prelude::*;
-    use std::{error::Error, f64::consts::PI, ops::Add};
+    use std::{error::Error, f64::consts::PI, ops::{Add, Mul, Div, Sub}};
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub enum Type{
         Sine,
@@ -38,8 +38,8 @@ pub mod curves{
     impl Type{
         pub fn inv(self:&Self)->Type{
             match self{
-                Sine=>Type::Cosine,
-                Cosine=>Type::Sine,
+                Type::Sine=>Type::Cosine,
+                Type::Cosine=>Type::Sine,
             }
         }
     }
@@ -48,8 +48,8 @@ pub mod curves{
         type Output = f64;
         fn add(self, rhs: f64) -> Self::Output {
             match self{
-                Sine=>rhs,
-                Cosine=>rhs+PI/2.,
+                Type::Sine=>rhs,
+                Type::Cosine=>rhs+PI/2.,
             }
         }
     }
@@ -75,7 +75,7 @@ pub mod curves{
         }
     }
     impl Calculus for Curve{
-        fn intergrate(self: &Self) -> Self {
+        fn integrate(self: &Self) -> Self {
             match self.phase{
                 Type::Sine=>Self{
                     mag: self.mag/self.fre * -1.,
@@ -104,7 +104,7 @@ pub mod curves{
             }
         }
     }
-    impl Add for Curve{
+    impl Add<Curve> for Curve{
         type Output = Option<Curve>;
         fn add(self, rhs: Self) -> Self::Output {
             if self.fre == rhs.fre && self.phase == rhs.phase{
@@ -119,6 +119,45 @@ pub mod curves{
             None
         }
     }
+    impl Sub<Curve> for Curve{
+        type Output = Option<Curve>;
+        fn sub(self, rhs: Self) -> Self::Output {
+            if self.fre == rhs.fre && self.phase == rhs.phase{
+                return Some(
+                    Curve::new(
+                        self.mag - rhs.mag,
+                        self.fre,
+                        self.phase
+                    )
+                )
+            }
+            None
+        }
+    }
+    impl Mul<f64> for Curve{
+        type Output = Curve;
+        fn mul(self, rhs: f64) -> Self::Output {
+            Self::Output{
+                mag: self.mag*rhs,
+                fre:self.fre,
+                phase: self.phase,
+            }
+        }
+    }
+    impl Div<f64> for Curve{
+        type Output = Curve;
+        fn div(self, rhs:f64) -> Self::Output{
+            Self::Output{
+                mag : self.mag/rhs,
+                fre: self.fre,
+                phase : self.phase
+            }
+        }
+    }
+
+
+
+
     #[derive(Debug, Clone)]
     pub struct FourierCurve{
         pub curves: Vec<Curve>,
@@ -151,10 +190,10 @@ pub mod curves{
         }
     }
     impl Calculus for FourierCurve{
-        fn intergrate(self: &Self) -> Self {
+        fn integrate(self: &Self) -> Self {
             let mut f = FourierCurve::new();
             for c in &self.curves{
-                f = f + c.intergrate();
+                f = f + c.integrate();
             }
             f
 
@@ -275,11 +314,6 @@ pub mod functions{
         pub fn push(self:&mut Self, b_poly:BoundedPolynomial){
             self.funcs.push(b_poly);
         }
-        pub fn is_continous(self:&mut Self){
-            for a in &self.funcs{
-               
-            }
-        }
     }
     impl Bounded for Function{
         fn in_bounds(self:&Self, x:f64) ->bool {
@@ -289,6 +323,22 @@ pub mod functions{
                 }
             }
             false
+        }
+    }
+    impl Calculus for Function{
+        fn integrate(self: &Self) -> Self {
+            let mut f = Function::new();
+            for bp in &self.funcs{
+                f.push(bp.integrate());
+            }
+            f
+        }
+        fn differenciate(self: &Self) ->Self {
+            let mut f = Function::new();
+            for bp in &self.funcs{
+                f.push(bp.differenciate());
+            }
+            f
         }
     }
     impl Ordinal for Function{
@@ -369,7 +419,20 @@ pub mod functions{
             self.poly.ord()
         }
     }
-
+    impl Calculus for BoundedPolynomial{
+        fn differenciate(self: &Self) ->Self {
+            Self{
+                poly : self.poly.differenciate(),
+                bounds: self.bounds,
+            }
+        }
+        fn integrate(self: &Self) -> Self {
+            Self{
+                poly : self.poly.integrate(),
+                bounds: self.bounds,
+            }
+        }
+    }
     impl Substitute for BoundedPolynomial{
         fn sub(self:&Self, x:f64) ->f64 {
             if self.bounds.0<x && self.bounds.1>x{
@@ -397,6 +460,22 @@ pub mod functions{
                 }
             }
             max
+        }
+    }
+    impl Calculus for Polynomial{
+        fn integrate(self: &Self) -> Self {
+            let mut p = Polynomial::new();
+            for t in &self.terms{
+                p = p + t.integrate();
+            }
+            p
+        }
+        fn differenciate(self: &Self) ->Self {
+            let mut p = Polynomial::new();
+            for t in &self.terms{
+                p = p + t.differenciate();
+            }
+            p
         }
     }
 
@@ -466,6 +545,20 @@ pub mod functions{
     impl Substitute for Term{
         fn sub(self:&Self, x:f64)->f64{
             self.coef* x.powf(self.pow)
+        }
+    }
+    impl Calculus for Term{
+        fn differenciate(self: &Self) ->Self {
+            Self{
+                coef: self.coef*self.pow,
+                pow: self.pow-1.
+            }
+        }
+        fn integrate(self: &Self) -> Self {
+            Self{
+                coef: self.coef/(self.pow+1.),
+                pow: self.pow+1.,
+            }
         }
     }
     /// Subtracting and Adding Terms can only work iff the pow is the same
@@ -676,6 +769,74 @@ mod tests{
         
             assert!(bp.in_bounds(10.) == false);
         }
+        
+        #[test]
+        fn test_calculus(){
+            let t = Term::new(2., 3.);
+            assert_eq!(
+                t.integrate(),
+                Term::new(2./4., 4.)
+            );
+            assert_eq!(
+                t.differenciate(),
+                Term::new(2.*3., 2.)
+            );
+
+
+            let mut p = Polynomial{
+                terms : vec!(
+                    Term::new(2., 3.)
+                )
+            };
+            assert_eq!(
+                p.integrate(),
+                Polynomial{
+                    terms : vec!(
+                        Term::new(2., 3.).integrate(),
+                    )
+                }
+            );
+            p = p + Term::new(3., 5.);
+
+            assert_eq!(
+                p.integrate(),
+                Polynomial{
+                    terms : vec!(
+                        Term::new(2., 3.).integrate(),
+                        Term::new(3., 5.).integrate(),
+                    )
+                }
+            );
+
+
+            let mut f = Function::new();
+            f.push(
+                BoundedPolynomial{
+                    poly: Polynomial{
+                        terms: vec!(
+                            Term::new(2., 3.),
+                        )
+                    }, 
+                    bounds: (0., 10.),
+                }
+            );
+
+            assert_eq!(
+                f.integrate(),
+                Function{
+                    funcs: vec!(
+                        BoundedPolynomial{
+                            poly: Polynomial{
+                                terms: vec!(
+                                    Term::new(2., 3.).integrate(),
+                                )
+                            }, 
+                            bounds: (0., 10.),
+                        }
+                    )
+                }
+            );
+        }
     } // mod test_function
 
     mod test_curves{
@@ -733,9 +894,9 @@ mod tests{
         #[test]
         fn curves_calculus(){
             let c = Curve::new(2., 3., Sine);
-            // Sine intergrates to - Cosine
+            // Sine integrates to - Cosine
             assert_eq!(
-                c.intergrate(),
+                c.integrate(),
                 Curve::new(-2./3., 3., Cosine)
             );
 
@@ -751,14 +912,14 @@ mod tests{
                 )
             };
             assert_eq!(
-                f.intergrate(),
+                f.integrate(),
                 FourierCurve{
                     curves:vec!(
-                        Curve::new(2., 3., Sine).intergrate()
+                        Curve::new(2., 3., Sine).integrate()
                     )
                 }
             );
-            
+
         }
     } // mod test_curves
 
