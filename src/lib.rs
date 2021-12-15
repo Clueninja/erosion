@@ -43,6 +43,7 @@ pub mod curves{
             }
         }
     }
+    
     impl Add<f64> for Type{
         type Output = f64;
         fn add(self, rhs: f64) -> Self::Output {
@@ -75,18 +76,31 @@ pub mod curves{
     }
     impl Calculus for Curve{
         fn intergrate(self: &Self) -> Self {
-            
-            Self{
-                mag: self.mag/self.fre * -1.,
-                fre: self.fre,
-                phase: self.phase.inv(),
+            match self.phase{
+                Type::Sine=>Self{
+                    mag: self.mag/self.fre * -1.,
+                    fre: self.fre,
+                    phase: Type::Cosine,
+                },
+                Type::Cosine=>Self{
+                    mag: self.mag/self.fre,
+                    fre: self.fre,
+                    phase: Type::Sine,
+                }
             }
         }
         fn differenciate(self: &Self) ->Self {
-            Self{
-                mag: self.mag*self.fre * -1.,
-                fre: self.fre,
-                phase: self.phase.inv(),
+            match self.phase{
+                Type::Sine=>Self{
+                    mag: self.mag*self.fre,
+                    fre: self.fre,
+                    phase: Type::Cosine,
+                },
+                Type::Cosine=>Self{
+                    mag: self.mag*self.fre * -1.,
+                    fre: self.fre,
+                    phase: Type::Sine,
+                }
             }
         }
     }
@@ -138,11 +152,19 @@ pub mod curves{
     }
     impl Calculus for FourierCurve{
         fn intergrate(self: &Self) -> Self {
-            FourierCurve::new()
+            let mut f = FourierCurve::new();
+            for c in &self.curves{
+                f = f + c.intergrate();
+            }
+            f
 
         }
         fn differenciate(self: &Self) ->Self {
-            FourierCurve::new()
+            let mut f = FourierCurve::new();
+            for c in &self.curves{
+                f = f + c.differenciate();
+            }
+            f
         }
     }
 
@@ -518,187 +540,227 @@ pub mod functions{
 mod tests{
     use crate::{prelude::*, functions::*, curves::{*, Type::*}};
 
-    #[test]
-    fn first(){
-        let mut curve = FourierCurve::new();
-        curve.push(Curve::new(1.,1., Sine));
-        curve.push(Curve::new(0.5,3., Sine));
-        curve.push(Curve::new(1./4.,5., Sine));
-        curve.push(Curve::new(1./8., 7., Sine));
+    mod test_plots{
+        use super::*;
+
+        #[test]
+        fn first(){
+            let mut curve = FourierCurve::new();
+            curve.push(Curve::new(1.,1., Sine));
+            curve.push(Curve::new(0.5,3., Sine));
+            curve.push(Curve::new(1./4.,5., Sine));
+            curve.push(Curve::new(1./8., 7., Sine));
+            
+            curve.plot("plotters-doc-data/first_test.png","test 1", (0.0,20.0), (-10.0, 20.0), 0.01).unwrap();
+
+
+        }
+        #[test]
+        fn square(){
+            let mut curve = FourierCurve::new();
+            curve.push(Curve::new(4.0,1., Sine));
+            curve.push(Curve::new(4./3.,3.0, Sine));
+            curve.push(Curve::new(4./5.,5.0,Sine));
+            curve.push(Curve::new(4./7.,7., Sine));
         
-        curve.plot("plotters-doc-data/first_test.png","test 1", (0.0,20.0), (-10.0, 20.0), 0.01).unwrap();
+            curve.plot("plotters-doc-data/square.png","square", (0.0,20.0), (-10.0, 20.0), 0.01).unwrap();
 
 
-    }
-    #[test]
-    fn square(){
-        let mut curve = FourierCurve::new();
-        curve.push(Curve::new(4.0,1., Sine));
-        curve.push(Curve::new(4./3.,3.0, Sine));
-        curve.push(Curve::new(4./5.,5.0,Sine));
-        curve.push(Curve::new(4./7.,7., Sine));
-       
-        curve.plot("plotters-doc-data/square.png","square", (0.0,20.0), (-10.0, 20.0), 0.01).unwrap();
+        }
+        #[test]
+        fn saw_tooth(){
+            let mut curve = FourierCurve::new();
+            curve.push(Curve::new(-2.,1., Sine));
+            curve.push(Curve::new(1.,2., Sine));
+            curve.push(Curve::new(-2./3.,3., Sine));
+            curve.push(Curve::new(0.5, 4., Sine));
 
 
-    }
-    #[test]
-    fn saw_tooth(){
-        let mut curve = FourierCurve::new();
-        curve.push(Curve::new(-2.,1., Sine));
-        curve.push(Curve::new(1.,2., Sine));
-        curve.push(Curve::new(-2./3.,3., Sine));
-        curve.push(Curve::new(0.5, 4., Sine));
+            curve.plot("plotters-doc-data/saw_tooth.png","Saw Tooth", (0.0,20.0), (-10.0, 20.0), 0.01).unwrap();
 
 
-        curve.plot("plotters-doc-data/saw_tooth.png","Saw Tooth", (0.0,20.0), (-10.0, 20.0), 0.01).unwrap();
+        }
+    } // mod test_plots
+    mod test_function{
+        use super::*;
 
+        #[test]
+        fn test_functions(){
+            let mut curve = Function::new();
+            curve.push(BoundedPolynomial{
+                poly:Polynomial{
+                    terms:vec![Term::new(1., 1.), Term::new(2., 2.), Term::new(3., 3.)]
+                }, 
+                bounds:(-1000., 1000.),
+            });
+            curve.plot("plotters-doc-data/test_func.png", "Test Function", (-100.,100.), (-1000.,1000.), 0.01).unwrap();
+        }
+        #[test]
+        fn function_binary(){
+            // Polynomial tests
+            let mut p = Polynomial::new();
 
-    }
-    
+            // add term to polynomial
+            p = p + Term::new(1., 1.);
+            assert_eq!(
+                p, 
+                Polynomial{
+                    terms:vec!(
+                        Term::new(1., 1.),
+                    )
+                }
+            );
+            // add another term with same pow
+            p = p + Term::new(2., 1.);
+            assert_eq!(
+                p, 
+                Polynomial{
+                    terms:vec!(Term::new(3., 1.))
+                }
+            );
+            // add another term with a differnent pow
+            p = p + Term::new(2., 2.) + Term::new(3., 3.);
+            assert_eq!(p, 
+                Polynomial{
+                    terms:vec!(
+                        Term::new(3., 3.),
+                        Term::new(3., 1.),
+                        Term::new(2.,2.),
+                    )
+                }
+            );
+            // Term tests
+            let t = Term::new(1., 1.);
+            
+            // Term op Term tests
+            // add
+            assert_eq!(t + Term::new(2., 1.), Some(Term::new(3., 1.)));
+            assert_eq! (t + Term::new(2., 2.), None);
+            // sub
+            assert_eq!(t-Term::new(0.5, 1.), Some(Term::new(0.5, 1.)));
+            assert_eq!(t-Term::new(2., 1.), Some(Term::new(-1., 1.)));
 
+            // Term op f64 tests
+            // mul
+            assert_eq!(t * 2. , Term::new(2., 1.));
+            // div
+            assert_eq!(t / 5., Term::new(1./5., 1.));
 
-    #[test]
-    fn test_functions(){
-        let mut curve = Function::new();
-        curve.push(BoundedPolynomial{
-            poly:Polynomial{
-                terms:vec![Term::new(1., 1.), Term::new(2., 2.), Term::new(3., 3.)]
-            }, 
-            bounds:(-1000., 1000.),
-        });
-        curve.plot("plotters-doc-data/test_func.png", "Test Function", (-100.,100.), (-1000.,1000.), 0.01).unwrap();
-    }
-    #[test]
-    fn function_binary(){
-        // Polynomial tests
-        let mut p = Polynomial::new();
-
-        // add term to polynomial
-        p = p + Term::new(1., 1.);
-        assert_eq!(
-            p, 
-            Polynomial{
-                terms:vec!(
-                    Term::new(1., 1.),
+            // Term op Term tests
+            // mul
+            assert_eq!(t * Term::new(2., 1.), Term::new(2., 2.));
+            assert_eq!(t * Term::new(3., 2.), Term::new(3., 3.));
+            // div
+            assert_eq!(t / Term::new(3., 2.), Term::new(1./3., -1.));
+        }
+        #[test]
+        fn test_bounds(){
+            let mut bp = BoundedPolynomial::from(Polynomial{
+                terms: vec!(
+                    Term::new(1.,2.),
+                    Term::new(2.,3.),
                 )
-            }
-        );
-        // add another term with same pow
-        p = p + Term::new(2., 1.);
-        assert_eq!(
-            p, 
-            Polynomial{
-                terms:vec!(Term::new(3., 1.))
-            }
-        );
-        // add another term with a differnent pow
-        p = p + Term::new(2., 2.) + Term::new(3., 3.);
-        assert_eq!(p, 
-            Polynomial{
-                terms:vec!(
-                    Term::new(3., 3.),
-                    Term::new(3., 1.),
-                    Term::new(2.,2.),
-                )
-            }
-        );
-        // Term tests
-        let t = Term::new(1., 1.);
+            });
+            assert!(bp.in_bounds(-1.) == false);
+            assert!(bp.in_bounds(5.) == true);
+            assert!(bp.in_bounds(11.) == false);
+
+            let b = bp.bounds_mut();
+            b.0 = -10.0;
+            
+            assert!(bp.in_bounds(-1.) == true);
+            assert!(bp.in_bounds(5.) == true);
+            assert!(bp.in_bounds(11.) == false);
+
+            assert!(bp.in_bounds(-10.) == true);
         
-        // Term op Term tests
-        // add
-        assert_eq!(t + Term::new(2., 1.), Some(Term::new(3., 1.)));
-        assert_eq! (t + Term::new(2., 2.), None);
-        // sub
-        assert_eq!(t-Term::new(0.5, 1.), Some(Term::new(0.5, 1.)));
-        assert_eq!(t-Term::new(2., 1.), Some(Term::new(-1., 1.)));
+            assert!(bp.in_bounds(10.) == false);
+        }
+    } // mod test_function
 
-        // Term op f64 tests
-        // mul
-        assert_eq!(t * 2. , Term::new(2., 1.));
-        // div
-        assert_eq!(t / 5., Term::new(1./5., 1.));
+    mod test_curves{
+        use super::*;
+        #[test]
+        fn curves_binary(){
+            let c = Curve::new(1., 1.,  Sine);
+            assert_eq!(
+                c + Curve::new(  2.,  1.,  Sine) ,
+                Some(Curve::new(3.,  1.,  Sine))
+            );
 
-        // Term op Term tests
-        // mul
-        assert_eq!(t * Term::new(2., 1.), Term::new(2., 2.));
-        assert_eq!(t * Term::new(3., 2.), Term::new(3., 3.));
-        // div
-        assert_eq!(t / Term::new(3., 2.), Term::new(1./3., -1.));
-    }
-    #[test]
-    fn test_bounds(){
-        let mut bp = BoundedPolynomial::from(Polynomial{
-            terms: vec!(
-                Term::new(1.,2.),
-                Term::new(2.,3.),
-            )
-        });
-        assert!(bp.in_bounds(-1.) == false);
-        assert!(bp.in_bounds(5.) == true);
-        assert!(bp.in_bounds(11.) == false);
+            assert_eq!(
+                c + Curve::new(  2.,  1.,  Cosine) , 
+                None
+            );
 
-        let b = bp.bounds_mut();
-        b.0 = -10.0;
-        
-        assert!(bp.in_bounds(-1.) == true);
-        assert!(bp.in_bounds(5.) == true);
-        assert!(bp.in_bounds(11.) == false);
+            assert_eq!(
+                c + Curve::new(  2.,  2.,  Sine) , 
+                None
+            );
 
-        assert!(bp.in_bounds(-10.) == true);
-    
-        assert!(bp.in_bounds(10.) == false);
-    }
-    #[test]
-    fn curves_binary(){
-        let c = Curve::new(1., 1.,  Sine);
-        assert_eq!(
-            c + Curve::new(  2.,  1.,  Sine) ,
-            Some(Curve::new(3.,  1.,  Sine))
-        );
+            assert_eq!(
+                c + Curve::new(  2.,  2.,  Cosine) , 
+                None
+            );
 
-        assert_eq!(
-            c + Curve::new(  2.,  1.,  Cosine) , 
-            None
-        );
-
-        assert_eq!(
-            c + Curve::new(  2.,  2.,  Sine) , 
-            None
-        );
-
-        assert_eq!(
-            c + Curve::new(  2.,  2.,  Cosine) , 
-            None
-        );
-
-        let mut f = FourierCurve{
-            curves: vec!(
-                Curve::new(1., 1., Sine),
-            )
-        };
-
-        f = f + Curve::new(2., 1., Sine);
-        assert_eq!(
-            f ,
-            FourierCurve{
+            let mut f = FourierCurve{
                 curves: vec!(
-                    Curve::new(3., 1., Sine),
+                    Curve::new(1., 1., Sine),
                 )
-            }
-        );
-        f = f + Curve::new(2., 2., Sine);
-        assert_eq!(
-            f,
-            FourierCurve{
-                curves: vec!(
-                    Curve::new(3., 1., Sine),
-                    Curve::new(2., 2., Sine),
+            };
+
+            f = f + Curve::new(2., 1., Sine);
+            assert_eq!(
+                f ,
+                FourierCurve{
+                    curves: vec!(
+                        Curve::new(3., 1., Sine),
+                    )
+                }
+            );
+            f = f + Curve::new(2., 2., Sine);
+            assert_eq!(
+                f,
+                FourierCurve{
+                    curves: vec!(
+                        Curve::new(3., 1., Sine),
+                        Curve::new(2., 2., Sine),
+                    )
+                }
+            );
+        }// fn curves_binary
+
+        #[test]
+        fn curves_calculus(){
+            let c = Curve::new(2., 3., Sine);
+            // Sine intergrates to - Cosine
+            assert_eq!(
+                c.intergrate(),
+                Curve::new(-2./3., 3., Cosine)
+            );
+
+            // Sine differentiates to Cosine
+            assert_eq!(
+                c.differenciate(),
+                Curve::new(2.*3., 3., Cosine)
+            );
+
+            let mut f = FourierCurve{
+                curves:vec!(
+                    Curve::new(2., 3., Sine)
                 )
-            }
-        );
-    }
+            };
+            assert_eq!(
+                f.intergrate(),
+                FourierCurve{
+                    curves:vec!(
+                        Curve::new(2., 3., Sine).intergrate()
+                    )
+                }
+            );
+            
+        }
+    } // mod test_curves
 
     
 
