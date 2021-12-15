@@ -13,97 +13,6 @@ pub mod prelude{
 }
 
 
-pub mod parser{
-    use std::{iter::Peekable, str::Chars, error::Error};
-    use super::prelude::*;
-
-    /// a single node in a parser
-    #[derive(Debug, Clone)]
-    pub struct ParseNode{
-        pub children:Vec<ParseNode>,
-        pub entry:GrammarItem,
-    }
-    impl ParseNode{
-        pub fn new()->ParseNode{
-            ParseNode{
-                children:Vec::new(),
-                entry: GrammarItem::Paren,
-            }
-        }
-    }
-
-    /// a single Grammar Item for the parser
-    #[derive(Debug, Clone)]
-    pub enum GrammarItem{
-        Paren,
-        Float(f64),
-        Var(char),
-        Plus,
-    }
-
-
-    #[derive(Debug, Clone, PartialEq)]
-    pub enum LexItem{
-        Paren(char),
-        Op(char),
-        Num(f64),
-        Var(char),
-    }
-    /// accepts a mutable refernence to an iterator, returns number of all the following digits
-    pub fn char_as_num(it: &mut Peekable<Chars>)->Result<LexItem, Box<dyn Error>>{
-        let mut astr = String::new();
-        while let Some(&c) = &it.peek(){
-            match  c{
-                '0'..='9'=>{
-                    astr.push_str(&c.to_string());
-                    it.next();
-                }
-                _=>return Ok(LexItem::Num(astr.parse::<f64>().unwrap()))
-            }
-        }
-        Ok(LexItem::Num(astr.parse::<f64>().unwrap()))
-        
-    }
-    /// Accepts a string, returns a Vec of LexItems
-    fn lex(input: &String)->Result<Vec<LexItem>, String>{
-        let mut result = Vec::new();
-        let mut it = input.chars().peekable();
-        while let Some(&c) = it.peek(){
-            match c{
-                '('|')'=>{
-                    result.push(LexItem::Paren(c));
-                    it.next();
-                }
-                '+'|'-'=>{
-                    result.push(LexItem::Op(c));
-                    it.next();
-                }
-                ' '=>{
-                    it.next();
-                }
-
-                '0'..='9'=>{
-                    result.push(char_as_num(&mut it).unwrap());
-                    it.next();
-                }
-                _=>{
-                    return Err(format!("Unexpected Item in the Lexer: {}", c))
-                }
-            }
-        }
-        Ok(result)
-    }
-    /// accepts a string, returns a ParseNode
-    pub fn parse(input:&String)->Result<ParseNode, String>{
-        let tokens = lex(input)?;
-        
-        
-
-        Ok(ParseNode::new())
-
-    }
-
-}
 
 pub mod curves{
     use plotters::prelude::*;
@@ -337,14 +246,17 @@ pub mod functions{
 
 #[cfg(test)]
 mod tests{
-    use crate::{prelude::*, functions::*, curves::*, parser::LexItem};
+    use crate::{prelude::*, functions::*, curves::*};
     use std::error::Error;
 
 
     #[test]
     fn first(){
         let mut curve = FourierCurve::new();
-        curve.push(Curve::new(5.0,2.0, 0.0));
+        curve.push(Curve::new(1.,1., 0.));
+        curve.push(Curve::new(0.5,3., 0.));
+        curve.push(Curve::new(1./4.,5., 0.));
+        curve.push(Curve::new(1./8., 7., 0.));
         
         curve.plot("plotters-doc-data/first_test.png","test 1", (0.0,20.0), (-10.0, 20.0), 0.01).unwrap();
 
@@ -390,17 +302,6 @@ mod tests{
         curve.plot("plotters-doc-data/test_func.png", "Test Function", (-100.,100.), (-1000.,1000.), 0.01);
     }
 
-    #[test]
-    fn test_char_to_num(){
-        use super::parser::char_as_num;
-        let result = "a123a".to_string();
-        let mut it = result.chars().peekable();
-        it.next();
-        let aint = char_as_num(&mut it).unwrap();
-        assert_eq!(LexItem::Num(123.), aint);
-        assert_eq!(it.peek(), Some(&'a'));
-
-
-    }
+    
 
 }// mod tests
