@@ -3,7 +3,7 @@ name = "erosion"
 authors = ["Sam Brown"]
 description = "A library to plot fourier curves and functions"
 license = "MIT"
-version = "0.1.1"
+version = "0.1.1.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
