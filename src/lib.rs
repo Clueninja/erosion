@@ -64,7 +64,7 @@ pub mod parser{
         Ok(LexItem::Num(astr.parse::<f64>().unwrap()))
         
     }
-    /// Accepts a string, returns a Vec of LexItems
+    /// Accepts a string, returns a Vec of LexItems.
     fn lex(input: &String)->Result<Vec<LexItem>, String>{
         let mut result = Vec::new();
         let mut it = input.chars().peekable();
