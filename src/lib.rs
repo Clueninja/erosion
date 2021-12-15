@@ -338,7 +338,7 @@ pub mod functions{
 
 #[cfg(test)]
 mod tests{
-    use crate::{prelude::*, functions::*, curves::*};
+    use crate::{prelude::*, functions::*, curves::*, parser::*};
     use std::error::Error;
 
 
