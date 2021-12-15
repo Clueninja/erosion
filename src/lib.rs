@@ -441,6 +441,7 @@ pub mod functions{
             0.
         }
     }
+    
     #[derive(Debug, Clone)]
     /// contains a list of terms
     pub struct Polynomial{
@@ -676,7 +677,6 @@ mod tests{
     } // mod test_plots
     mod test_function{
         use super::*;
-
         #[test]
         fn test_functions(){
             let mut curve = Function::new();
@@ -808,7 +808,6 @@ mod tests{
                 }
             );
 
-
             let mut f = Function::new();
             f.push(
                 BoundedPolynomial{
@@ -836,9 +835,43 @@ mod tests{
                     )
                 }
             );
+
+            f.push(
+                BoundedPolynomial{
+                    poly: Polynomial{
+                        terms: vec!(
+                            Term::new(2., 4.),
+                        )
+                    }, 
+                    bounds: (0., 10.),
+                }
+            );
+
+            assert_eq!(
+                f.integrate(),
+                Function{
+                    funcs: vec!(
+                        BoundedPolynomial{
+                            poly: Polynomial{
+                                terms: vec!(
+                                    Term::new(2., 3.).integrate(),
+                                )
+                            }, 
+                            bounds: (0., 10.),
+                        },
+                        BoundedPolynomial{
+                            poly: Polynomial{
+                                terms: vec!(
+                                    Term::new(2., 4.).integrate(),
+                                )
+                            }, 
+                            bounds: (0., 10.),
+                        }
+                    )
+                }
+            );
         }
     } // mod test_function
-
     mod test_curves{
         use super::*;
         #[test]
@@ -922,7 +955,4 @@ mod tests{
 
         }
     } // mod test_curves
-
-    
-
 }// mod tests
