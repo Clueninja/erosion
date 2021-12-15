@@ -396,4 +396,17 @@ mod tests{
 
     
 
+    #[test]
+    fn test_char_to_num(){
+        use super::parser::char_as_num;
+        let result = "a123a".to_string();
+        let mut it = result.chars().peekable();
+        it.next();
+        let aint = char_as_num(&mut it).unwrap();
+        assert_eq!(LexItem::Num(123.), aint);
+        assert_eq!(it.peek(), Some(&'a'));
+
+
+    }
+
 }// mod tests
