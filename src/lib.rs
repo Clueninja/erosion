@@ -355,10 +355,6 @@ pub mod functions{
         pub fn new()->Self{
             Self{funcs:Vec::new()}
         }
-        // TODO: check whether bounds overlap
-        pub fn push(self:&mut Self, b_poly:BoundedPolynomial){
-            self.funcs.push(b_poly);
-        }
     }
     impl Bounded for Function{
         fn in_bounds(self:&Self, x:f64) ->bool {
@@ -374,14 +370,14 @@ pub mod functions{
         fn integrate(self: &Self) -> Self {
             let mut f = Function::new();
             for bp in &self.funcs{
-                f.push(bp.integrate());
+                f = (f + bp.integrate()).unwrap();
             }
             f
         }
         fn differenciate(self: &Self) ->Self {
             let mut f = Function::new();
             for bp in &self.funcs{
-                f.push(bp.differenciate());
+                f = (f + bp.differenciate()).unwrap();
             }
             f
         }
@@ -438,6 +434,20 @@ pub mod functions{
         }
     }
 
+    impl Add<BoundedPolynomial> for Function{
+        type Output = Option<Function>;
+        fn add(self, rhs: BoundedPolynomial) -> Self::Output {
+            let mut f = self;
+            if f.in_bounds(rhs.bounds.0) || f.in_bounds(rhs.bounds.0){
+                return None;
+            }
+            f.funcs.push(rhs);
+            Some(f)
+            
+        }
+    }
+
+
     /// A bounded polynomial contains a polynomial and bounds in which it is defined
     #[derive(Debug, Clone, PartialEq)]
     pub struct BoundedPolynomial{
@@ -486,6 +496,65 @@ pub mod functions{
             0.
         }
     }
+
+    impl Add<Term> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn add(self, rhs: Term) -> Self::Output {
+            Self::Output{
+                poly: self.poly + rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+    impl Sub<Term> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn sub(self, rhs: Term) -> Self::Output {
+            Self::Output{
+                poly: self.poly - rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+
+    impl Mul<f64> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn mul(self, rhs: f64) -> Self::Output {
+            Self::Output{
+                poly: self.poly * rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+    impl Mul<Term> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn mul(self, rhs: Term) -> Self::Output {
+            Self::Output{
+                poly: self.poly * rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+
+
+    impl Div<f64> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn div(self, rhs: f64) -> Self::Output {
+            Self::Output{
+                poly: self.poly / rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+    impl Div<Term> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn div(self, rhs: Term) -> Self::Output {
+            Self::Output{
+                poly: self.poly / rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+    
     
     #[derive(Debug, Clone)]
     /// contains a list of terms
@@ -575,6 +644,58 @@ pub mod functions{
             poly
         }
     }
+    impl Sub<Term> for Polynomial{
+        type Output = Polynomial;
+        fn sub(self, rhs: Term) -> Self::Output {
+            self + rhs * -1.
+        }
+    }
+    impl Sub<Polynomial> for Polynomial{
+        type Output = Polynomial;
+        fn sub(self, rhs: Polynomial) -> Self::Output {
+            self + rhs * -1.
+        }
+    }
+    impl Mul<f64> for Polynomial{
+        type Output = Polynomial;
+        fn mul(self, rhs: f64) -> Self::Output {
+            let mut p = Polynomial::new();
+            for t in self.terms{
+                p = p + t*rhs;
+            }
+            p
+        }
+    }
+    impl Mul<Term> for Polynomial{
+        type Output = Polynomial;
+        fn mul(self, rhs: Term) -> Self::Output {
+            let mut p = Polynomial::new();
+            for t in self.terms{
+                p = p + t*rhs;
+            }
+            p
+        }
+    }
+    impl Div<f64> for Polynomial{
+        type Output = Polynomial;
+        fn div(self, rhs: f64) -> Self::Output {
+            let mut p = Polynomial::new();
+            for t in self.terms{
+                p = p + t/rhs;
+            }
+            p
+        }
+    }
+    impl Div<Term> for Polynomial{
+        type Output = Polynomial;
+        fn div(self, rhs: Term) -> Self::Output {
+            let mut p = Polynomial::new();
+            for t in self.terms{
+                p = p + t/rhs;
+            }
+            p
+        }
+    }
 
     /// A term is in the form
     /// (coef * x ^ pow)
@@ -608,7 +729,7 @@ pub mod functions{
         }
     }
     /// Subtracting and Adding Terms can only work iff the pow is the same
-    impl Sub for Term{
+    impl Sub<Term> for Term{
         type Output = Option<Term>;
         fn sub(self, rhs: Self) -> Self::Output {
             if self.pow == rhs.pow{
@@ -620,7 +741,7 @@ pub mod functions{
             None
         }
     }
-    impl Add for Term{
+    impl Add<Term> for Term{
         type Output = Option<Term>;
         fn add(self, rhs: Self) -> Self::Output {
             if self.pow == rhs.pow{
@@ -725,12 +846,12 @@ mod tests{
         #[test]
         fn test_functions(){
             let mut curve = Function::new();
-            curve.push(BoundedPolynomial{
+            curve = (curve +BoundedPolynomial{
                 poly:Polynomial{
                     terms:vec![Term::new(1., 1.), Term::new(2., 2.), Term::new(3., 3.)]
                 }, 
                 bounds:(-1000., 1000.),
-            });
+            }).unwrap();
             curve.plot("plotters-doc-data/test_func.png", "Test Function", (-100.,100.), (-1000.,1000.), 0.01).unwrap();
         }
         #[test]
@@ -854,7 +975,7 @@ mod tests{
             );
 
             let mut f = Function::new();
-            f.push(
+            f =( f +
                 BoundedPolynomial{
                     poly: Polynomial{
                         terms: vec!(
@@ -863,7 +984,7 @@ mod tests{
                     }, 
                     bounds: (0., 10.),
                 }
-            );
+            ).unwrap();
 
             assert_eq!(
                 f.integrate(),
@@ -881,16 +1002,16 @@ mod tests{
                 }
             );
 
-            f.push(
+            f = ( f +
                 BoundedPolynomial{
                     poly: Polynomial{
                         terms: vec!(
                             Term::new(2., 4.),
                         )
                     }, 
-                    bounds: (0., 10.),
+                    bounds: (10., 20.),
                 }
-            );
+            ).unwrap();
 
             assert_eq!(
                 f.integrate(),
@@ -910,7 +1031,7 @@ mod tests{
                                     Term::new(2., 4.).integrate(),
                                 )
                             }, 
-                            bounds: (0., 10.),
+                            bounds: (10., 20.),
                         }
                     )
                 }
@@ -984,7 +1105,7 @@ mod tests{
                 Curve::new(2.*3., 3., Cosine)
             );
 
-            let mut f = FourierCurve{
+            let f = FourierCurve{
                 curves:vec!(
                     Curve::new(2., 3., Sine)
                 )
