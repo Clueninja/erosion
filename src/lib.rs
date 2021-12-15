@@ -179,9 +179,6 @@ pub mod curves{
         }
     }
 
-
-
-
     #[derive(Debug, Clone)]
     pub struct FourierCurve{
         pub curves: Vec<Curve>,
@@ -443,7 +440,53 @@ pub mod functions{
             }
             f.funcs.push(rhs);
             Some(f)
-            
+        }
+    }
+    // piggy back off Add
+    impl Sub<BoundedPolynomial> for Function{
+        type Output = Option<Function>;
+        fn sub(self, rhs: BoundedPolynomial) -> Self::Output {
+            self + rhs * -1.
+        }
+    }
+    impl Mul<Term> for Function{
+        type Output = Function;
+        fn mul(self, rhs: Term) -> Self::Output {
+            let mut f = Function::new();
+            for b in self.funcs{
+                f = (f + b * rhs).unwrap();
+            }
+            f
+        }
+    }
+    impl Mul<f64> for Function{
+        type Output = Function;
+        fn mul(self, rhs: f64) -> Self::Output {
+            let mut f = Function::new();
+            for b in self.funcs{
+                f = (f + b * rhs).unwrap();
+            }
+            f
+        }
+    }
+    impl Div<Term> for Function{
+        type Output = Function;
+        fn div(self, rhs: Term) -> Self::Output {
+            let mut f = Function::new();
+            for b in self.funcs{
+                f = (f + b / rhs).unwrap();
+            }
+            f
+        }
+    }
+    impl Div<f64> for Function{
+        type Output = Function;
+        fn div(self, rhs: f64) -> Self::Output {
+            let mut f = Function::new();
+            for b in self.funcs{
+                f = (f + b / rhs).unwrap();
+            }
+            f
         }
     }
 
@@ -934,6 +977,57 @@ mod tests{
             assert!(bp.in_bounds(-10.) == true);
         
             assert!(bp.in_bounds(10.) == false);
+
+            let mut f = Function::new();
+            f = (f + 
+                BoundedPolynomial{
+                    poly : Polynomial{
+                        terms: vec!(
+                            Term::new(3., 2.),
+                        )
+                    },
+                bounds: (0., 10.),
+            }).unwrap();
+            assert!(
+                (f.clone() + BoundedPolynomial{
+                    poly : Polynomial{
+                        terms: vec!(
+                            Term::new(3., 2.),
+                        )
+                    },
+                bounds: (9., 20.),
+            }) == None);
+
+            assert!((f + BoundedPolynomial{
+                    poly : Polynomial{
+                        terms: vec!(
+                            Term::new(3., 2.),
+                        )
+                    },
+                bounds: (10., 20.),
+            }) == Some( Function{
+                    funcs: vec!(
+                        BoundedPolynomial{
+                            poly : Polynomial{
+                                terms: vec!(
+                                    Term::new(3., 2.),
+                                )
+                            },
+                            bounds: (0., 10.),
+                        },
+                        BoundedPolynomial{
+                            poly : Polynomial{
+                                terms: vec!(
+                                    Term::new(3., 2.),
+                                )
+                            },
+                            bounds: (10., 20.),
+                        }
+                    )
+                }
+
+            ));
+
         }
         
         #[test]
