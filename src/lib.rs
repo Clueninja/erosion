@@ -8,7 +8,7 @@ pub mod prelude{
     }
 
     pub trait Substitute{
-        fn sub(self:&Self, x:f64)->f64;
+        fn substitute(self:&Self, x:f64)->f64;
     }
 
     pub trait Ordinal{
@@ -29,7 +29,7 @@ pub mod prelude{
 pub mod curves{
     use plotters::prelude::*;
     use super::prelude::*;
-    use std::{error::Error, f64::consts::PI, ops::{Add, Mul, Div, Sub}};
+    use std::{error::Error, f64::consts::PI, ops::{Add, Mul, Div, Sub, AddAssign, SubAssign, MulAssign, DivAssign}};
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub enum Type{
         Sine,
@@ -70,7 +70,7 @@ pub mod curves{
     } // impl Curve
     /// sub into Curve a value for theta
     impl Substitute for Curve{
-        fn sub(self:&Self, x:f64)->f64{
+        fn substitute(self:&Self, x:f64)->f64{
             self.mag*(self.fre*(self.phase + x)).sin()
         }
     }
@@ -102,6 +102,30 @@ pub mod curves{
                     phase: Type::Sine,
                 }
             }
+        }
+    }
+    impl AddAssign for Curve{
+        fn add_assign(&mut self, rhs: Self) {
+            if let Some(c) = *self + rhs{
+                *self = c;
+            }
+        }
+    }
+    impl SubAssign for Curve{
+        fn sub_assign(&mut self, rhs: Self) {
+            if let Some(c) = *self - rhs{
+                *self = c;
+            }
+        }
+    }
+    impl MulAssign<f64> for Curve{
+        fn mul_assign(&mut self, rhs: f64) {
+            *self = *self * rhs;
+        }
+    }
+    impl DivAssign<f64> for Curve{
+        fn div_assign(&mut self, rhs: f64) {
+            *self = *self / rhs;
         }
     }
     impl Add<Curve> for Curve{
@@ -183,7 +207,7 @@ pub mod curves{
             let mut result:Vec<f64> = Vec::new();
             let x_axis = (-3.14..3.14).step(0.01);
             for val in x_axis.values(){
-                result.push(self.sub(val));
+                result.push(self.substitute(val));
             }
             // read up to 10 bytes
             result
@@ -229,7 +253,7 @@ pub mod curves{
                 .draw()?;
                 
             let x_axis = (x_bound.0..x_bound.1).step(step);
-            chart.draw_series(LineSeries::new(x_axis.values().map(|x| (x, self.sub(x as f64) as f32)), &RED))?;
+            chart.draw_series(LineSeries::new(x_axis.values().map(|x| (x, self.substitute(x as f64) as f32)), &RED))?;
             //.label("Curve")
             //.legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
             //chart.configure_series_labels().border_style(&BLACK).draw()?;
@@ -241,10 +265,10 @@ pub mod curves{
         }
     }// impl Plotable for FourierCurve
     impl Substitute for FourierCurve{
-        fn sub(self:&Self, x:f64)->f64{
+        fn substitute(self:&Self, x:f64)->f64{
             let mut sum = 0.0;
             for c in &self.curves{
-                sum= sum + c.sub(x);
+                sum= sum + c.substitute(x);
             }
             sum
         }
@@ -259,24 +283,33 @@ pub mod curves{
             true
         }
     }
-
+    impl Mul<f64> for FourierCurve{
+        type Output = FourierCurve;
+        fn mul(self, rhs: f64) -> Self::Output {
+            let mut f = self;
+            for a in f.curves.iter_mut(){
+                *a =  *a * rhs;
+            }
+            f
+        }
+    }
     
     impl Add<FourierCurve> for FourierCurve{
         type Output = FourierCurve;
         fn add(self, rhs: FourierCurve) -> Self::Output {
-            let mut fou = self;
+            let mut f = self;
             for c in rhs.curves{
-                fou = fou + c;
+                f = f + c;
             }
-            fou
+            f
         }
     }
     impl Add<Curve> for FourierCurve{
         type Output = FourierCurve;
         fn add(self, rhs: Curve) -> Self::Output {
-            let mut fou = self;
+            let mut f = self;
             let mut is_added = false;
-            for c in fou.curves.iter_mut(){
+            for c in f.curves.iter_mut(){
                 match *c + rhs{
                     Some(curve)=>{
                         *c = curve;
@@ -286,9 +319,21 @@ pub mod curves{
                 }
             }
             if !is_added{
-                fou.curves.push(rhs);
+                f.curves.push(rhs);
             }
-            fou
+            f
+        }
+    }
+    impl Sub<Curve> for FourierCurve{
+        type Output = FourierCurve;
+        fn sub(self, rhs: Curve) -> Self::Output {
+            self + rhs * -1.
+        }
+    }
+    impl Sub<FourierCurve> for FourierCurve{
+        type Output = FourierCurve;
+        fn sub(self, rhs: FourierCurve) -> Self::Output {
+            self + rhs * -1.
         }
     }
         
@@ -310,10 +355,6 @@ pub mod functions{
         pub fn new()->Self{
             Self{funcs:Vec::new()}
         }
-        // TODO: check whether bounds overlap
-        pub fn push(self:&mut Self, b_poly:BoundedPolynomial){
-            self.funcs.push(b_poly);
-        }
     }
     impl Bounded for Function{
         fn in_bounds(self:&Self, x:f64) ->bool {
@@ -329,14 +370,14 @@ pub mod functions{
         fn integrate(self: &Self) -> Self {
             let mut f = Function::new();
             for bp in &self.funcs{
-                f.push(bp.integrate());
+                f = (f + bp.integrate()).unwrap();
             }
             f
         }
         fn differenciate(self: &Self) ->Self {
             let mut f = Function::new();
             for bp in &self.funcs{
-                f.push(bp.differenciate());
+                f = (f + bp.differenciate()).unwrap();
             }
             f
         }
@@ -373,7 +414,7 @@ pub mod functions{
                 .draw()?;
                 
             let x_axis = (x_bound.0..x_bound.1).step(step);
-            chart.draw_series(LineSeries::new(x_axis.values().map(|x| (x, self.sub(x as f64) as f32)), &RED))?;
+            chart.draw_series(LineSeries::new(x_axis.values().map(|x| (x, self.substitute(x as f64) as f32)), &RED))?;
             //.label("Curve")
             //.legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
             //chart.configure_series_labels().border_style(&BLACK).draw()?;
@@ -384,14 +425,28 @@ pub mod functions{
         }
     }
     impl Substitute for Function{
-        fn sub(self:&Self, x:f64) ->f64 {
+        fn substitute(self:&Self, x:f64) ->f64 {
             let mut ret = 0.;
             for t in &self.funcs{
-                ret +=t.sub(x);
+                ret +=t.substitute(x);
             }
             ret
         }
     }
+
+    impl Add<BoundedPolynomial> for Function{
+        type Output = Option<Function>;
+        fn add(self, rhs: BoundedPolynomial) -> Self::Output {
+            let mut f = self;
+            if f.in_bounds(rhs.bounds.0) || f.in_bounds(rhs.bounds.0){
+                return None;
+            }
+            f.funcs.push(rhs);
+            Some(f)
+            
+        }
+    }
+
 
     /// A bounded polynomial contains a polynomial and bounds in which it is defined
     #[derive(Debug, Clone, PartialEq)]
@@ -434,13 +489,72 @@ pub mod functions{
         }
     }
     impl Substitute for BoundedPolynomial{
-        fn sub(self:&Self, x:f64) ->f64 {
+        fn substitute(self:&Self, x:f64) ->f64 {
             if self.bounds.0<x && self.bounds.1>x{
-                return self.poly.sub(x);
+                return self.poly.substitute(x);
             }
             0.
         }
     }
+
+    impl Add<Term> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn add(self, rhs: Term) -> Self::Output {
+            Self::Output{
+                poly: self.poly + rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+    impl Sub<Term> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn sub(self, rhs: Term) -> Self::Output {
+            Self::Output{
+                poly: self.poly - rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+
+    impl Mul<f64> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn mul(self, rhs: f64) -> Self::Output {
+            Self::Output{
+                poly: self.poly * rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+    impl Mul<Term> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn mul(self, rhs: Term) -> Self::Output {
+            Self::Output{
+                poly: self.poly * rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+
+
+    impl Div<f64> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn div(self, rhs: f64) -> Self::Output {
+            Self::Output{
+                poly: self.poly / rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+    impl Div<Term> for BoundedPolynomial{
+        type Output = BoundedPolynomial;
+        fn div(self, rhs: Term) -> Self::Output {
+            Self::Output{
+                poly: self.poly / rhs,
+                bounds: self.bounds,
+            }
+        }
+    }
+    
     
     #[derive(Debug, Clone)]
     /// contains a list of terms
@@ -481,10 +595,10 @@ pub mod functions{
     }
 
     impl Substitute for Polynomial{
-        fn sub(self:&Self, x:f64) ->f64 {
+        fn substitute(self:&Self, x:f64) ->f64 {
             let mut ret = 0.;
             for t in &self.terms{
-                ret +=t.sub(x);
+                ret +=t.substitute(x);
             }
             ret
         }
@@ -530,6 +644,58 @@ pub mod functions{
             poly
         }
     }
+    impl Sub<Term> for Polynomial{
+        type Output = Polynomial;
+        fn sub(self, rhs: Term) -> Self::Output {
+            self + rhs * -1.
+        }
+    }
+    impl Sub<Polynomial> for Polynomial{
+        type Output = Polynomial;
+        fn sub(self, rhs: Polynomial) -> Self::Output {
+            self + rhs * -1.
+        }
+    }
+    impl Mul<f64> for Polynomial{
+        type Output = Polynomial;
+        fn mul(self, rhs: f64) -> Self::Output {
+            let mut p = Polynomial::new();
+            for t in self.terms{
+                p = p + t*rhs;
+            }
+            p
+        }
+    }
+    impl Mul<Term> for Polynomial{
+        type Output = Polynomial;
+        fn mul(self, rhs: Term) -> Self::Output {
+            let mut p = Polynomial::new();
+            for t in self.terms{
+                p = p + t*rhs;
+            }
+            p
+        }
+    }
+    impl Div<f64> for Polynomial{
+        type Output = Polynomial;
+        fn div(self, rhs: f64) -> Self::Output {
+            let mut p = Polynomial::new();
+            for t in self.terms{
+                p = p + t/rhs;
+            }
+            p
+        }
+    }
+    impl Div<Term> for Polynomial{
+        type Output = Polynomial;
+        fn div(self, rhs: Term) -> Self::Output {
+            let mut p = Polynomial::new();
+            for t in self.terms{
+                p = p + t/rhs;
+            }
+            p
+        }
+    }
 
     /// A term is in the form
     /// (coef * x ^ pow)
@@ -544,7 +710,7 @@ pub mod functions{
         }
     }
     impl Substitute for Term{
-        fn sub(self:&Self, x:f64)->f64{
+        fn substitute(self:&Self, x:f64)->f64{
             self.coef* x.powf(self.pow)
         }
     }
@@ -563,7 +729,7 @@ pub mod functions{
         }
     }
     /// Subtracting and Adding Terms can only work iff the pow is the same
-    impl Sub for Term{
+    impl Sub<Term> for Term{
         type Output = Option<Term>;
         fn sub(self, rhs: Self) -> Self::Output {
             if self.pow == rhs.pow{
@@ -575,7 +741,7 @@ pub mod functions{
             None
         }
     }
-    impl Add for Term{
+    impl Add<Term> for Term{
         type Output = Option<Term>;
         fn add(self, rhs: Self) -> Self::Output {
             if self.pow == rhs.pow{
@@ -680,12 +846,12 @@ mod tests{
         #[test]
         fn test_functions(){
             let mut curve = Function::new();
-            curve.push(BoundedPolynomial{
+            curve = (curve +BoundedPolynomial{
                 poly:Polynomial{
                     terms:vec![Term::new(1., 1.), Term::new(2., 2.), Term::new(3., 3.)]
                 }, 
                 bounds:(-1000., 1000.),
-            });
+            }).unwrap();
             curve.plot("plotters-doc-data/test_func.png", "Test Function", (-100.,100.), (-1000.,1000.), 0.01).unwrap();
         }
         #[test]
@@ -809,7 +975,7 @@ mod tests{
             );
 
             let mut f = Function::new();
-            f.push(
+            f =( f +
                 BoundedPolynomial{
                     poly: Polynomial{
                         terms: vec!(
@@ -818,7 +984,7 @@ mod tests{
                     }, 
                     bounds: (0., 10.),
                 }
-            );
+            ).unwrap();
 
             assert_eq!(
                 f.integrate(),
@@ -836,16 +1002,16 @@ mod tests{
                 }
             );
 
-            f.push(
+            f = ( f +
                 BoundedPolynomial{
                     poly: Polynomial{
                         terms: vec!(
                             Term::new(2., 4.),
                         )
                     }, 
-                    bounds: (0., 10.),
+                    bounds: (10., 20.),
                 }
-            );
+            ).unwrap();
 
             assert_eq!(
                 f.integrate(),
@@ -865,7 +1031,7 @@ mod tests{
                                     Term::new(2., 4.).integrate(),
                                 )
                             }, 
-                            bounds: (0., 10.),
+                            bounds: (10., 20.),
                         }
                     )
                 }
@@ -939,7 +1105,7 @@ mod tests{
                 Curve::new(2.*3., 3., Cosine)
             );
 
-            let mut f = FourierCurve{
+            let f = FourierCurve{
                 curves:vec!(
                     Curve::new(2., 3., Sine)
                 )
