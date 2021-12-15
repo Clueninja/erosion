@@ -1,8 +1,21 @@
 //! Erosion
-//! 'erosion' is a library to plot Fourier Curves and Non-Continous Functions
+//!  A library to plot Fourier Curves and Non-Continous Functions
+
+pub mod prelude{
+    use std::error::Error;
+    pub trait Plottable{
+        fn plot(self:&Self, output_file:&str, caption:&str, x_bound:(f32,f32), y_bound:(f32,f32), step:f32)->Result<(),Box<dyn Error>>;
+    }
+
+    pub trait Substitute{
+        fn sub(self:&Self, x:f64)->f64;
+    }
+}
+
 
 pub mod parser{
     use std::{iter::Peekable, str::Chars, error::Error};
+    use super::prelude::*;
 
     /// a single node in a parser
     #[derive(Debug, Clone)]
@@ -29,27 +42,27 @@ pub mod parser{
     }
 
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub enum LexItem{
         Paren(char),
-        Plus,
+        Op(char),
         Num(f64),
         Var(char),
     }
     /// accepts a mutable refernence to an iterator, returns number of all the following digits
-    fn char_as_num(it: &mut Peekable<Chars>)->Result<LexItem, Box<dyn Error>>{
+    pub fn char_as_num(it: &mut Peekable<Chars>)->Result<LexItem, Box<dyn Error>>{
         let mut astr = String::new();
-        loop{
-            if let Some(&c) = &it.peek(){
-                match  c{
-                    '0'..='9'=>{
-                        astr.push_str(&c.to_string());
-                        it.next();
-                    }
-                    _=>return Ok(LexItem::Num(astr.parse::<f64>().unwrap()))
+        while let Some(&c) = &it.peek(){
+            match  c{
+                '0'..='9'=>{
+                    astr.push_str(&c.to_string());
+                    it.next();
                 }
+                _=>return Ok(LexItem::Num(astr.parse::<f64>().unwrap()))
             }
         }
+        Ok(LexItem::Num(astr.parse::<f64>().unwrap()))
+        
     }
     /// Accepts a string, returns a Vec of LexItems
     fn lex(input: &String)->Result<Vec<LexItem>, String>{
@@ -61,8 +74,8 @@ pub mod parser{
                     result.push(LexItem::Paren(c));
                     it.next();
                 }
-                '+'=>{
-                    result.push(LexItem::Plus);
+                '+'|'-'=>{
+                    result.push(LexItem::Op(c));
                     it.next();
                 }
                 ' '=>{
@@ -83,7 +96,7 @@ pub mod parser{
     /// accepts a string, returns a ParseNode
     pub fn parse(input:&String)->Result<ParseNode, String>{
         let tokens = lex(input)?;
-    
+        
         
 
         Ok(ParseNode::new())
@@ -95,7 +108,7 @@ pub mod parser{
 pub mod curves{
     use plotters::prelude::*;
 
-    use super::{Plottable, Substitute};
+    use super::prelude::{Plottable, Substitute};
     use std::error::Error;
 
 
@@ -137,23 +150,20 @@ pub mod curves{
         pub fn push_curve(self:&mut Self, mag:f64, fre:f64, phase:f64){
             self.push(Curve::new(mag, fre, phase));
         }
-
-        /// outputs the Fourier Curve as a binary file
-        pub fn as_bytes(self:&Self, file_name:&str, x_bound:(f64,f64), step:f64, length : usize)-> io::Result<()> {
-            let mut f = File::create(file_name)?;
-            let mut buffer = [0; 1024*1024];
-            for index in 0..length{
-                let byte = 8.0*(self.sub(x_bound.0+step*(index as f64))+14.0);
-                buffer[index] =byte as u8;
-                //println!("{}", step*(index as f64));
+        
+    } // impl FourierCourve
+    impl Into<Vec<f64>> for FourierCurve{
+        fn into(self) -> Vec<f64> {
+            let mut result:Vec<f64> = Vec::new();
+            let x_axis = (-3.14..3.14).step(0.01);
+            for val in x_axis.values(){
+                result.push(self.sub(val));
             }
             // read up to 10 bytes
-            let n = f.write(&mut buffer)?;
-        
-            println!("The bytes: {:?}", &buffer[..n]);
-            Ok(())
+            result
         }
-    } // impl FourierCourve
+    }
+
     impl Plottable for FourierCurve{
     
         fn plot(self:&Self, output_file:&str, caption:&str, x_bound:(f32,f32), y_bound:(f32,f32), step:f32)->Result<(),Box<dyn Error>>{
@@ -202,8 +212,8 @@ pub mod curves{
 
 pub mod functions{
     use plotters::prelude::*;
+    use super::prelude::*;
 
-    use super::{Plottable, Substitute};
     use std::error::Error;
 
     /// A Function is a list of Bounded Polynomials
@@ -221,7 +231,7 @@ pub mod functions{
     }
     impl Plottable for Function{
         fn plot(self:&Self, output_file:&str, caption:&str, x_bound:(f32,f32), y_bound:(f32,f32), step:f32) ->Result<(),Box<dyn Error>> {
-            let root = BitMapBackend::new(output_file,(640,480)).into_drawing_area();
+            let root = BitMapBackend::new(output_file,(1080,920)).into_drawing_area();
             root.fill(&WHITE)?;
 
             let mut chart = ChartBuilder::on(&root)
@@ -321,20 +331,14 @@ pub mod functions{
     
 }
 
-use std::error::Error;
-pub trait Plottable{
-    fn plot(self:&Self, output_file:&str, caption:&str, x_bound:(f32,f32), y_bound:(f32,f32), step:f32)->Result<(),Box<dyn Error>>;
-}
 
-pub trait Substitute{
-    fn sub(self:&Self, x:f64)->f64;
-}
 
 
 
 #[cfg(test)]
 mod tests{
-    use crate::{Plottable, Substitute, functions::*, curves::{FourierCurve, Curve}};
+    use crate::{prelude::*, functions::*, curves::*, parser::LexItem};
+    use std::error::Error;
 
 
     #[test]
@@ -371,23 +375,9 @@ mod tests{
 
 
     }
-    #[test]
-    fn test_buffer(){
-        let mut curve = FourierCurve::new();
-        curve.push(Curve::new(10.0,0.1, 1.2));
-        curve.push(Curve::new(2.0,1.0, 5.3));
-        curve.push(Curve::new(0.5,2.0,3.2));
-        curve.push(Curve::new(1.0,0.2,2.2));
-        curve.push(Curve::new(3.0,3.0,0.2));
-        curve.push(Curve::new(0.1,5.2, 5.0));
+    
 
-        let result = curve.as_bytes("plotters-doc-data/test_buffer", (0.0,200.0), (1.0/8000.0) as f64, 1024*1024);
-        match result{
-            Err(_)=>panic!("There was a file error"),
-            Ok(())=>(),
-        }
 
-    }
     #[test]
     fn test_functions(){
         let mut curve = Function::new();
@@ -398,6 +388,19 @@ mod tests{
             bounds:(-1000., 1000.),
         });
         curve.plot("plotters-doc-data/test_func.png", "Test Function", (-100.,100.), (-1000.,1000.), 0.01);
+    }
+
+    #[test]
+    fn test_char_to_num(){
+        use super::parser::char_as_num;
+        let result = "a123a".to_string();
+        let mut it = result.chars().peekable();
+        it.next();
+        let aint = char_as_num(&mut it).unwrap();
+        assert_eq!(LexItem::Num(123.), aint);
+        assert_eq!(it.peek(), Some(&'a'));
+
+
     }
 
 }// mod tests
