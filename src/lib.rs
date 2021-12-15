@@ -123,9 +123,10 @@ pub mod functions{
     use plotters::prelude::*;
     use super::prelude::*;
 
-    use std::error::Error;
+    use std::{error::Error, ops::{Sub, Add, Mul, Div}};
 
     /// A Function is a list of Bounded Polynomials
+    #[derive(Debug, Clone, PartialEq, PartialOrd)]
     pub struct Function{
         pub funcs:Vec<BoundedPolynomial>,
     }
@@ -136,6 +137,11 @@ pub mod functions{
         // TODO: check whether bounds overlap
         pub fn push(self:&mut Self, b_poly:BoundedPolynomial){
             self.funcs.push(b_poly);
+        }
+        pub fn is_continous(self:&mut Self){
+            for a in &self.funcs{
+               
+            }
         }
     }
     impl Plottable for Function{
@@ -180,6 +186,7 @@ pub mod functions{
     }
 
     /// A bounded polynomial contains a polynomial and bounds in which it is defined
+    #[derive(Debug, Clone, PartialEq, PartialOrd)]
     pub struct BoundedPolynomial{
         pub poly:Polynomial,
         pub bounds:(f64, f64),
@@ -200,7 +207,7 @@ pub mod functions{
             0.
         }
     }
-
+    #[derive(Debug, Clone, PartialEq, PartialOrd)]
     /// contains a list of terms
     pub struct Polynomial{
         pub terms:Vec<Term>,
@@ -221,8 +228,40 @@ pub mod functions{
         }
     }
 
+    impl Add<Polynomial> for Polynomial{
+        type Output = Polynomial;
+        fn add(self, rhs: Polynomial) -> Self::Output {
+            let mut poly = self;
+            for t in rhs.terms{
+                poly = poly + t;
+            }
+            poly
+        }
+    }
+    impl Add<Term> for Polynomial{
+        type Output = Polynomial;
+        fn add(self, rhs: Term) -> Self::Output {
+            let mut poly = self;
+            let mut is_added = false;
+            for t in poly.terms.iter_mut(){
+                match *t + rhs{
+                    Some(term)=>{
+                        *t = term;
+                        is_added = true;
+                    },
+                    None=>{},
+                }
+            }
+            if !is_added{
+                poly.terms.push(rhs);
+            }
+            poly
+        }
+    }
+
     /// A term is in the form
     /// (coef * x ^ pow)
+    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
     pub struct Term{
         pub coef:f64,
         pub pow:f64
@@ -235,6 +274,67 @@ pub mod functions{
     impl Substitute for Term{
         fn sub(self:&Self, x:f64)->f64{
             self.coef* x.powf(self.pow)
+        }
+    }
+    /// Subtracting and Adding Terms can only work iff the pow is the same
+    impl Sub for Term{
+        type Output = Option<Term>;
+        fn sub(self, rhs: Self) -> Self::Output {
+            if self.pow == rhs.pow{
+                return Some(Self{
+                    coef: self.coef-rhs.coef,
+                    pow:self.pow,
+                })
+            }
+            None
+        }
+    }
+    impl Add for Term{
+        type Output = Option<Term>;
+        fn add(self, rhs: Self) -> Self::Output {
+            if self.pow == rhs.pow{
+                return Some(Self{
+                    coef: self.coef+rhs.coef,
+                    pow:self.pow,
+                })
+            }
+            None
+        }
+    }
+    impl Mul<Term> for Term{
+        type Output = Term;
+        fn mul(self, rhs: Term) -> Self::Output {
+            Self::Output{
+                coef:self.coef*rhs.coef,
+                pow:self.pow+rhs.pow,
+            }
+        }
+    }
+    impl Div<Term> for Term{
+        type Output = Term;
+        fn div(self, rhs: Term) -> Self::Output {
+            Self::Output{
+                coef:self.coef/rhs.coef,
+                pow:self.pow-rhs.pow,
+            }
+        }
+    }
+    impl Mul<f64> for Term{
+        type Output = Term;
+        fn mul(self, rhs: f64) -> Self::Output {
+            Self::Output{
+                coef: self.coef*rhs,
+                pow: self.pow,
+            }
+        }
+    }
+    impl Div<f64> for Term{
+        type Output = Term;
+        fn div(self, rhs: f64) -> Self::Output {
+            Self::Output{
+                coef: self.coef/rhs,
+                pow: self.pow,
+            }
         }
     }
     
@@ -299,7 +399,67 @@ mod tests{
             }, 
             bounds:(-1000., 1000.),
         });
-        curve.plot("plotters-doc-data/test_func.png", "Test Function", (-100.,100.), (-1000.,1000.), 0.01);
+        curve.plot("plotters-doc-data/test_func.png", "Test Function", (-100.,100.), (-1000.,1000.), 0.01).unwrap();
+    }
+    #[test]
+    fn test_binary(){
+        // Polynomial tests
+        let mut p = Polynomial::new();
+
+        // add term to polynomial
+        p = p + Term::new(1., 1.);
+        assert_eq!(
+            p, 
+            Polynomial{
+                terms:vec!(
+                    Term::new(1., 1.),
+                )
+            }
+        );
+        // add another term with same pow
+        p = p + Term::new(2., 1.);
+        assert_eq!(
+            p, 
+            Polynomial{
+                terms:vec!(Term::new(3., 1.))
+            }
+        );
+        // add another term with a differnent pow
+        p = p + Term::new(2., 2.);
+        assert_eq!(p, 
+            Polynomial{
+                terms:vec!(
+                    Term::new(3., 1.),
+                    Term::new(2.,2.),
+                )
+            }
+        );
+        // Term tests
+        let t = Term::new(1., 1.);
+        
+        // Term op Term tests
+        // add
+        assert_eq!(t + Term::new(2., 1.), Some(Term::new(3., 1.)));
+        assert_eq! (t + Term::new(2., 2.), None);
+        // sub
+        assert_eq!(t-Term::new(0.5, 1.), Some(Term::new(0.5, 1.)));
+        assert_eq!(t-Term::new(2., 1.), Some(Term::new(-1., 1.)));
+
+        // Term op f64 tests
+        // mul
+        assert_eq!(t * 2. , Term::new(2., 1.));
+        // div
+        assert_eq!(t / 5., Term::new(1./5., 1.));
+
+        // Term op Term tests
+        // mul
+        assert_eq!(t * Term::new(2., 1.), Term::new(2., 2.));
+        assert_eq!(t * Term::new(3., 2.), Term::new(3., 3.));
+        // div
+        assert_eq!(t / Term::new(3., 2.), Term::new(1./3., -1.))
+
+
+
     }
 
     
