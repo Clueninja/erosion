@@ -10,53 +10,117 @@ pub mod prelude{
     pub trait Substitute{
         fn sub(self:&Self, x:f64)->f64;
     }
+
+    pub trait Ordinal{
+        fn ord(self:&Self)->f64;
+    }
+    pub trait Bounded{
+        fn in_bounds(self:&Self, x:f64)->bool;
+    }
+
+    pub trait Calculus{
+        fn intergrate(self: &Self)-> Self;
+        fn differenciate(self: &Self)->Self;
+    }
 }
 
 
 
 pub mod curves{
     use plotters::prelude::*;
-
-    use super::prelude::{Plottable, Substitute};
-    use std::error::Error;
-
-
-    use std::io;
-    use std::io::prelude::*;
-    use std::fs::File;
+    use super::prelude::*;
+    use std::{error::Error, f64::consts::PI, ops::Add};
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub enum Type{
+        Sine,
+        Cosine,
+    }
+    impl Type{
+        pub fn inv(self:&Self)->Type{
+            match self{
+                Sine=>Type::Cosine,
+                Cosine=>Type::Sine,
+            }
+        }
+    }
+    impl Add<f64> for Type{
+        type Output = f64;
+        fn add(self, rhs: f64) -> Self::Output {
+            match self{
+                Sine=>rhs,
+                Cosine=>rhs+PI/2.,
+            }
+        }
+    }
 
     /// A sine curve in the form 
-    /// mag*sine(fre*x + phase)
+    /// mag * sine ( fre * ( x + phase ) )
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct Curve{
-        pub mag: f64,
-        pub fre:f64,
-        pub phase:f64
+        pub mag : f64,
+        pub fre : f64,
+        pub phase : Type,
     }
 
     impl Curve{
-        pub fn new(mag:f64, fre:f64, phase:f64)->Self{
+        pub fn new(mag:f64, fre:f64, phase:Type)->Self{
             Self{mag, fre, phase}
         }
     } // impl Curve
     /// sub into Curve a value for theta
     impl Substitute for Curve{
         fn sub(self:&Self, x:f64)->f64{
-            self.mag*(self.fre*x+self.phase).sin()
+            self.mag*(self.fre*(self.phase + x)).sin()
         }
     }
+    impl Calculus for Curve{
+        fn intergrate(self: &Self) -> Self {
+            
+            Self{
+                mag: self.mag/self.fre * -1.,
+                fre: self.fre,
+                phase: self.phase.inv(),
+            }
+        }
+        fn differenciate(self: &Self) ->Self {
+            Self{
+                mag: self.mag*self.fre * -1.,
+                fre: self.fre,
+                phase: self.phase.inv(),
+            }
+        }
+    }
+    impl Add for Curve{
+        type Output = Option<Curve>;
+        fn add(self, rhs: Self) -> Self::Output {
+            if self.fre == rhs.fre && self.phase == rhs.phase{
+                return Some(
+                    Curve::new(
+                        self.mag + rhs.mag,
+                        self.fre,
+                        self.phase
+                    )
+                )
+            }
+            None
+        }
+    }
+    #[derive(Debug, Clone)]
     pub struct FourierCurve{
-        curves: Vec<Curve>,
+        pub curves: Vec<Curve>,
     }
     impl FourierCurve{
         pub fn new()->Self{
-            FourierCurve{curves:Vec::new()}
+            FourierCurve{
+                curves:Vec::new(),
+            }
         }
         /// push a curve into the Fourier Curve
         pub fn push(self:& mut Self, curve: Curve){
             self.curves.push(curve);
         }
         /// push components of a Curve into the Fourier Curve
-        pub fn push_curve(self:&mut Self, mag:f64, fre:f64, phase:f64){
+        pub fn push_curve(self:&mut Self, mag:f64, fre:f64, phase:Type){
             self.push(Curve::new(mag, fre, phase));
         }
         
@@ -70,6 +134,15 @@ pub mod curves{
             }
             // read up to 10 bytes
             result
+        }
+    }
+    impl Calculus for FourierCurve{
+        fn intergrate(self: &Self) -> Self {
+            FourierCurve::new()
+
+        }
+        fn differenciate(self: &Self) ->Self {
+            FourierCurve::new()
         }
     }
 
@@ -105,7 +178,7 @@ pub mod curves{
             Ok(())
     
         }
-    }// impl Plottble for FourierCurve
+    }// impl Plotable for FourierCurve
     impl Substitute for FourierCurve{
         fn sub(self:&Self, x:f64)->f64{
             let mut sum = 0.0;
@@ -113,6 +186,48 @@ pub mod curves{
                 sum= sum + c.sub(x);
             }
             sum
+        }
+    }
+    impl PartialEq for FourierCurve{
+        fn eq(&self, other: &Self) -> bool {
+            for a in &self.curves{
+                if !other.curves.contains(a){
+                    return false
+                }
+            }
+            true
+        }
+    }
+
+    
+    impl Add<FourierCurve> for FourierCurve{
+        type Output = FourierCurve;
+        fn add(self, rhs: FourierCurve) -> Self::Output {
+            let mut fou = self;
+            for c in rhs.curves{
+                fou = fou + c;
+            }
+            fou
+        }
+    }
+    impl Add<Curve> for FourierCurve{
+        type Output = FourierCurve;
+        fn add(self, rhs: Curve) -> Self::Output {
+            let mut fou = self;
+            let mut is_added = false;
+            for c in fou.curves.iter_mut(){
+                match *c + rhs{
+                    Some(curve)=>{
+                        *c = curve;
+                        is_added = true;
+                    },
+                    None=>{},
+                }
+            }
+            if !is_added{
+                fou.curves.push(rhs);
+            }
+            fou
         }
     }
         
@@ -126,7 +241,7 @@ pub mod functions{
     use std::{error::Error, ops::{Sub, Add, Mul, Div}};
 
     /// A Function is a list of Bounded Polynomials
-    #[derive(Debug, Clone, PartialEq, PartialOrd)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct Function{
         pub funcs:Vec<BoundedPolynomial>,
     }
@@ -142,6 +257,27 @@ pub mod functions{
             for a in &self.funcs{
                
             }
+        }
+    }
+    impl Bounded for Function{
+        fn in_bounds(self:&Self, x:f64) ->bool {
+            for p in &self.funcs{
+                if p.in_bounds(x){
+                    return true
+                }
+            }
+            false
+        }
+    }
+    impl Ordinal for Function{
+        fn ord(self:&Self) ->f64 {
+            let mut max = f64::NEG_INFINITY;
+            for f in & self.funcs{
+                if f.ord()>max{
+                    max = f.ord();
+                }
+            }
+            max
         }
     }
     impl Plottable for Function{
@@ -186,18 +322,31 @@ pub mod functions{
     }
 
     /// A bounded polynomial contains a polynomial and bounds in which it is defined
-    #[derive(Debug, Clone, PartialEq, PartialOrd)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct BoundedPolynomial{
         pub poly:Polynomial,
         pub bounds:(f64, f64),
+    }
+    impl BoundedPolynomial{
+        pub fn bounds_mut(self:&mut Self)-> &mut (f64, f64){
+            &mut self.bounds
+        }
+    }
+    impl Bounded for BoundedPolynomial{
+        fn in_bounds(self:&Self, x:f64)->bool{
+            self.bounds.0<=x && x< self.bounds.1
+        }
     }
     impl From<Polynomial> for BoundedPolynomial{
         fn from(poly: Polynomial) -> Self {
             Self{poly, bounds:(0.,10.)}
         }
     }
-
-    
+    impl Ordinal for BoundedPolynomial{
+        fn ord(self:&Self) ->f64 {
+            self.poly.ord()
+        }
+    }
 
     impl Substitute for BoundedPolynomial{
         fn sub(self:&Self, x:f64) ->f64 {
@@ -207,7 +356,7 @@ pub mod functions{
             0.
         }
     }
-    #[derive(Debug, Clone, PartialEq, PartialOrd)]
+    #[derive(Debug, Clone)]
     /// contains a list of terms
     pub struct Polynomial{
         pub terms:Vec<Term>,
@@ -215,6 +364,17 @@ pub mod functions{
     impl Polynomial{
         pub fn new()->Self{
             Self{terms: Vec::new()}
+        }
+    }
+    impl Ordinal for Polynomial{
+        fn ord(self:&Self) ->f64 {
+            let mut max = f64::NEG_INFINITY;
+            for t in &self.terms{
+                if t.pow>max{
+                    max = t.pow;
+                }
+            }
+            max
         }
     }
 
@@ -227,7 +387,17 @@ pub mod functions{
             ret
         }
     }
-
+    impl PartialEq for Polynomial{
+        fn eq(&self, other: &Self) -> bool {
+            for a in &self.terms{
+                if !other.terms.contains(a){
+                    return false
+                }
+            }
+            true
+        }
+    }
+    
     impl Add<Polynomial> for Polynomial{
         type Output = Polynomial;
         fn add(self, rhs: Polynomial) -> Self::Output {
@@ -346,17 +516,15 @@ pub mod functions{
 
 #[cfg(test)]
 mod tests{
-    use crate::{prelude::*, functions::*, curves::*};
-    use std::error::Error;
-
+    use crate::{prelude::*, functions::*, curves::{*, Type::*}};
 
     #[test]
     fn first(){
         let mut curve = FourierCurve::new();
-        curve.push(Curve::new(1.,1., 0.));
-        curve.push(Curve::new(0.5,3., 0.));
-        curve.push(Curve::new(1./4.,5., 0.));
-        curve.push(Curve::new(1./8., 7., 0.));
+        curve.push(Curve::new(1.,1., Sine));
+        curve.push(Curve::new(0.5,3., Sine));
+        curve.push(Curve::new(1./4.,5., Sine));
+        curve.push(Curve::new(1./8., 7., Sine));
         
         curve.plot("plotters-doc-data/first_test.png","test 1", (0.0,20.0), (-10.0, 20.0), 0.01).unwrap();
 
@@ -365,10 +533,10 @@ mod tests{
     #[test]
     fn square(){
         let mut curve = FourierCurve::new();
-        curve.push(Curve::new(4.0,1., 0.0));
-        curve.push(Curve::new(4./3.,3.0, 0.0));
-        curve.push(Curve::new(4./5.,5.0,0.0));
-        curve.push(Curve::new(4./7.,7., 0.0));
+        curve.push(Curve::new(4.0,1., Sine));
+        curve.push(Curve::new(4./3.,3.0, Sine));
+        curve.push(Curve::new(4./5.,5.0,Sine));
+        curve.push(Curve::new(4./7.,7., Sine));
        
         curve.plot("plotters-doc-data/square.png","square", (0.0,20.0), (-10.0, 20.0), 0.01).unwrap();
 
@@ -377,10 +545,10 @@ mod tests{
     #[test]
     fn saw_tooth(){
         let mut curve = FourierCurve::new();
-        curve.push(Curve::new(-2.,1., 0.));
-        curve.push(Curve::new(1.,2., 0.));
-        curve.push(Curve::new(-2./3.,3., 0.));
-        curve.push(Curve::new(0.5, 4., 0.));
+        curve.push(Curve::new(-2.,1., Sine));
+        curve.push(Curve::new(1.,2., Sine));
+        curve.push(Curve::new(-2./3.,3., Sine));
+        curve.push(Curve::new(0.5, 4., Sine));
 
 
         curve.plot("plotters-doc-data/saw_tooth.png","Saw Tooth", (0.0,20.0), (-10.0, 20.0), 0.01).unwrap();
@@ -402,7 +570,7 @@ mod tests{
         curve.plot("plotters-doc-data/test_func.png", "Test Function", (-100.,100.), (-1000.,1000.), 0.01).unwrap();
     }
     #[test]
-    fn test_binary(){
+    fn function_binary(){
         // Polynomial tests
         let mut p = Polynomial::new();
 
@@ -425,10 +593,11 @@ mod tests{
             }
         );
         // add another term with a differnent pow
-        p = p + Term::new(2., 2.);
+        p = p + Term::new(2., 2.) + Term::new(3., 3.);
         assert_eq!(p, 
             Polynomial{
                 terms:vec!(
+                    Term::new(3., 3.),
                     Term::new(3., 1.),
                     Term::new(2.,2.),
                 )
@@ -456,10 +625,79 @@ mod tests{
         assert_eq!(t * Term::new(2., 1.), Term::new(2., 2.));
         assert_eq!(t * Term::new(3., 2.), Term::new(3., 3.));
         // div
-        assert_eq!(t / Term::new(3., 2.), Term::new(1./3., -1.))
+        assert_eq!(t / Term::new(3., 2.), Term::new(1./3., -1.));
+    }
+    #[test]
+    fn test_bounds(){
+        let mut bp = BoundedPolynomial::from(Polynomial{
+            terms: vec!(
+                Term::new(1.,2.),
+                Term::new(2.,3.),
+            )
+        });
+        assert!(bp.in_bounds(-1.) == false);
+        assert!(bp.in_bounds(5.) == true);
+        assert!(bp.in_bounds(11.) == false);
 
+        let b = bp.bounds_mut();
+        b.0 = -10.0;
+        
+        assert!(bp.in_bounds(-1.) == true);
+        assert!(bp.in_bounds(5.) == true);
+        assert!(bp.in_bounds(11.) == false);
 
+        assert!(bp.in_bounds(-10.) == true);
+    
+        assert!(bp.in_bounds(10.) == false);
+    }
+    #[test]
+    fn curves_binary(){
+        let c = Curve::new(1., 1.,  Sine);
+        assert_eq!(
+            c + Curve::new(  2.,  1.,  Sine) ,
+            Some(Curve::new(3.,  1.,  Sine))
+        );
 
+        assert_eq!(
+            c + Curve::new(  2.,  1.,  Cosine) , 
+            None
+        );
+
+        assert_eq!(
+            c + Curve::new(  2.,  2.,  Sine) , 
+            None
+        );
+
+        assert_eq!(
+            c + Curve::new(  2.,  2.,  Cosine) , 
+            None
+        );
+
+        let mut f = FourierCurve{
+            curves: vec!(
+                Curve::new(1., 1., Sine),
+            )
+        };
+
+        f = f + Curve::new(2., 1., Sine);
+        assert_eq!(
+            f ,
+            FourierCurve{
+                curves: vec!(
+                    Curve::new(3., 1., Sine),
+                )
+            }
+        );
+        f = f + Curve::new(2., 2., Sine);
+        assert_eq!(
+            f,
+            FourierCurve{
+                curves: vec!(
+                    Curve::new(3., 1., Sine),
+                    Curve::new(2., 2., Sine),
+                )
+            }
+        );
     }
 
     
